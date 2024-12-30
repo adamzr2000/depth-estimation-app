@@ -1,0 +1,5 @@
+keras~=2.15.0
+tensorflow[and-cuda]~=2.15.0
+numpy
+huggingface_hub
+flask
