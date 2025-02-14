@@ -1,9 +1,38 @@
 from flask import Flask, render_template, Response
 import cv2
 import numpy as np
+import os
 from huggingface_hub import from_pretrained_keras
+import tensorflow as tf
+import keras
 
 app = Flask(__name__)
+
+# Suppress verbose TensorFlow logging
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ["KERAS_BACKEND"] = "tensorflow"
+
+print(f"Keras version: {keras.__version__}")
+print(f"TensorFlow Version: {tf.__version__}")
+
+# Check if TensorFlow was built with GPU support
+gpu_support = tf.test.is_built_with_cuda()
+print(f"Built with GPU Support: {'Yes' if gpu_support else 'No'}")
+
+# List physical GPUs detected by TensorFlow
+gpus = tf.config.list_physical_devices('GPU')
+
+if gpus:
+    print(f"GPUs Detected: {len(gpus)}")
+    for idx, gpu in enumerate(gpus):
+        print(f"  GPU {idx}: {gpu}")
+else:
+    print("No GPUs Detected")
+    # Print CPU details
+    cpu_devices = tf.config.list_physical_devices('CPU')
+    print(f"CPUs Detected: {len(cpu_devices)}")
+    for idx, cpu in enumerate(cpu_devices):
+        print(f"  CPU {idx}: {cpu}")
 
 # Load the pretrained model from Hugging Face Hub
 print("Loading pretrained model...")

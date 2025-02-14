@@ -41,7 +41,6 @@ def preprocess_frame(frame):
     input_frame = np.expand_dims(normalized_frame, axis=0)  # Add batch dimension
     return input_frame
 
-frame_count = 0
 while True:
     # Capture a frame from the webcam
     ret, frame = cap.read()
@@ -55,27 +54,21 @@ while True:
     # Predict the depth map
     depth_map = model.predict(input_frame)[0, :, :, 0]
 
-    # Extract depth statistics
-    min_depth = np.min(depth_map)
-    max_depth = np.max(depth_map)
-    avg_depth = np.mean(depth_map)
-    std_depth = np.std(depth_map)
-    median_depth = np.median(depth_map)
-    
-    frame_count += 1
-    print(f"Frame {frame_count}:")
-    print(f"  - Min Depth: {min_depth:.4f} (Lowest estimated depth in the frame)")
-    print(f"  - Max Depth: {max_depth:.4f} (Highest estimated depth in the frame)")
-    print(f"  - Avg Depth: {avg_depth:.4f} (Mean depth across the entire frame)")
-    print(f"  - Std Depth: {std_depth:.4f} (Standard deviation, indicating depth variation)")
-    print(f"  - Median Depth: {median_depth:.4f} (Middle value of depth distribution)")
-    print("---------------------------------------------------")
+    # Normalize the depth map for visualization
+    depth_map_normalized = (depth_map - np.min(depth_map)) / (np.max(depth_map) - np.min(depth_map))
+    depth_map_normalized = (depth_map_normalized * 255).astype(np.uint8)
+
+    # Apply a colormap for better visualization
+    depth_colormap = cv2.applyColorMap(depth_map_normalized, cv2.COLORMAP_JET)
+
+    # Display the original frame and the depth map
+    cv2.imshow("Original Frame", frame)
+    cv2.imshow("Depth Map", depth_colormap)
 
     # Exit on pressing 'q'
     if cv2.waitKey(1) & 0xFF == ord('q'):
-        print("Exit requested. Stopping...")
         break
 
-# Release the webcam
+# Release the webcam and close all OpenCV windows
 cap.release()
-print("Webcam released. Exiting.")
+cv2.destroyAllWindows()
