@@ -7,6 +7,8 @@ Start the depth estimation service:
 ./run_example.sh
 ```
 
+![server terminal](./server-terminal.png)
+
 ## On Your Machine
 Send video frames to the 5TONIC server:
 
@@ -20,11 +22,6 @@ Ensure:
 - The server is running.
 - Docker is installed and the [video-sender](./docker-images/video-sender) image is built.
 
-# Depth Estimation App
+![input](./input-video.png)
 
-## On the 5TONIC Server
-Start the depth estimation service:
-
-```bash
-./run_example.sh
-```
+![output](./output-video.png)
