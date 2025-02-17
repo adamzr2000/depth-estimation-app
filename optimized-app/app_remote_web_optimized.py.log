@@ -1,0 +1,30 @@
+root@depth-estimation-app:/optimized-app/cpu/deployment_bench# python3 app_remote_web_optimized.py 
+2025-02-17 18:05:46,951 - INFO - Loading SOL optimized model...
+2025-02-17 18:05:46,954 - INFO - SOL model loaded successfully!
+ * Serving Flask app 'app_remote_web_optimized'
+ * Debug mode: off
+2025-02-17 18:05:52,506 - INFO - Preprocessed Frame: (1, 256, 256, 3), Min: 0.0000, Max: 1.0000
+2025-02-17 18:05:52,507 - INFO - Input Array Shape: (1, 256, 256, 3), Min: 0.0000, Max: 1.0000
+2025-02-17 18:05:52,507 - INFO - Output Array Shape: (1, 128, 128, 1), Min: 0.0000, Max: 0.0000
+2025-02-17 18:06:19,308 - INFO - Output Array After Run: Min: nan, Max: nan
+2025-02-17 18:06:19,309 - WARNING - Depth map contains NaN or Inf values: [[nan nan nan ... nan nan nan]
+ [nan nan nan ... nan nan nan]
+ [nan nan nan ... nan nan nan]
+ ...
+ [nan nan nan ... nan nan nan]
+ [nan nan nan ... nan nan nan]
+ [nan nan nan ... nan nan nan]]
+2025-02-17 18:06:19,311 - INFO - Preprocessed Frame: (1, 256, 256, 3), Min: 0.0000, Max: 1.0000
+2025-02-17 18:06:19,311 - INFO - Input Array Shape: (1, 256, 256, 3), Min: 0.0000, Max: 1.0000
+2025-02-17 18:06:19,311 - INFO - Output Array Shape: (1, 128, 128, 1), Min: 0.0000, Max: 0.0000
+2025-02-17 18:06:46,232 - INFO - Output Array After Run: Min: nan, Max: nan
+2025-02-17 18:06:46,233 - WARNING - Depth map contains NaN or Inf values: [[nan nan nan ... nan nan nan]
+ [nan nan nan ... nan nan nan]
+ [nan nan nan ... nan nan nan]
+ ...
+ [nan nan nan ... nan nan nan]
+ [nan nan nan ... nan nan nan]
+ [nan nan nan ... nan nan nan]]
+2025-02-17 18:06:46,235 - INFO - Preprocessed Frame: (1, 256, 256, 3), Min: 0.0000, Max: 1.0000
+2025-02-17 18:06:46,235 - INFO - Input Array Shape: (1, 256, 256, 3), Min: 0.0000, Max: 1.0000
+2025-02-17 18:06:46,235 - INFO - Output Array Shape: (1, 128, 128, 1), Min: 0.0000, Max: 0.0000

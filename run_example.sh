@@ -10,6 +10,6 @@ docker run \
     -p 5000:5000 \
     --group-add video \
     depth-estimation-app:latest \
-    python3 app_remote_web.py 
+    # python3 app_remote_web.py 
 
 echo "Done."

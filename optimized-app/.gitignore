@@ -1,2 +1,9 @@
-cpu/
+cpu/deployed_monocular_cpu_avx2_latest_2.tar
+cpu/deployment_bench/libsleef.so.3        
+cpu/deployment_bench/libsol-dnn-dnnl-handle-0.7.0rc9-3.6.2.so  
+cpu/deployment_bench/libtungl.so.0  
+cpu/deployment_bench/sol_monocular.h   
+cpu/deployment_bench/libsol_monocular.so       
+cpu/deployment_bench/libsleefgnuabi.so.3     
+cpu/deployment_bench/sol_example             
 gpu/
