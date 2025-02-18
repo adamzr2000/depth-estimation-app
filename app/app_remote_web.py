@@ -43,7 +43,8 @@ model = from_pretrained_keras("keras-io/monocular-depth-estimation")
 depth_logger.info("Model loaded successfully!")
 
 # Define input dimensions
-HEIGHT, WIDTH = 256, 256
+# WIDTH, HEIGHT = 256, 256
+WIDTH, HEIGHT = 512, 512
 
 # Shared frame buffer and lock
 frame_buffer = None
@@ -51,8 +52,11 @@ buffer_lock = threading.Lock()
 frame_count = 0
 
 def preprocess_frame(frame):
+    # Resize the input frame to the target dimensions (WIDTH, HEIGHT)
     resized_frame = cv2.resize(frame, (WIDTH, HEIGHT))
+    # Convert the resized frame to float32 type and normalize pixel values to [0, 1]
     normalized_frame = resized_frame.astype("float32") / 255.0
+    # Add a batch dimension to the frame (shape becomes (1, HEIGHT, WIDTH, 3))
     return np.expand_dims(normalized_frame, axis=0)
 
 @app.route('/upload_frame', methods=['POST'])
@@ -85,6 +89,9 @@ def generate_depth_frames():
             frame = frame_buffer.copy()
         input_frame = preprocess_frame(frame)
         depth_map = model.predict(input_frame)[0, :, :, 0]
+        
+        print("Input buffer shape:", input_frame.shape)
+        print("Output buffer shape:", depth_map.shape)
 
         # Extract depth statistics
         min_depth = np.min(depth_map)

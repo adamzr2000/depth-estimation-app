@@ -74,9 +74,17 @@ class sol_monocular:
 def main():
 	# Define Function Parameters (Inputs, Outputs, VDims)---------------------------------------------
 	vdims = np.ndarray((1), dtype=np.int64)
+
+	# Define input dimensions
+	WIDTH, HEIGHT = 256, 256
+	# WIDTH, HEIGHT = 512, 512
 	
-	in__input_1 = np.random.rand(1, 256, 256, 3, ).astype(np.float32)
-	out__0 = np.zeros((1, 128, 128, 1, ), dtype=np.float32)
+	# Create a random WIDTHxHEIGHT RGB image (1 image, 3 color channels), scaled to the float32 type.
+	in__input_1 = np.random.rand(1, WIDTH, HEIGHT, 3, ).astype(np.float32)
+	
+	# Create a 256x256 image with one channel (e.g., depth map) and a batch size of 1, initialized to zeros in float32 format.
+	out__0 = np.zeros((1, 256, 256, 1, ), dtype=np.float32)
+
 	dp_args = [in__input_1, out__0, vdims] # Inputs, Outputs, VDims must be in this exact order!
 
 	print("Input Data (first 5 values):", in__input_1.flatten()[:5])

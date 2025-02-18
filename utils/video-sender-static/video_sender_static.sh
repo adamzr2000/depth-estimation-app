@@ -1,0 +1,1 @@
+python3 client.py --server_url http://10.5.1.21:5000/upload_frame
