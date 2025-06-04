@@ -1,5 +1,9 @@
-# FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04 # Alienware pc
-FROM nvidia/cuda:12.0.0-runtime-ubuntu22.04 
+
+# Adam PC
+#FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04 
+
+# 5TONIC server
+FROM nvidia/cuda:12.0.0-runtime-ubuntu22.04
 
 LABEL maintainer="azahir@pa.uc3m.es"
 
@@ -19,7 +23,6 @@ RUN apt-get update && apt-get install -y \
 # Install dependencies 
 RUN pip3 install --no-cache-dir \
       keras==2.15.0 \
-      tensorflow==2.15.0 \
       tensorflow[and-cuda]~=2.15.0 \
       numpy \
       huggingface_hub \

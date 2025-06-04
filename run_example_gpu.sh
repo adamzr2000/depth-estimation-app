@@ -14,7 +14,7 @@ docker run \
     --runtime=nvidia \
     --group-add video \
     --gpus all \
-    depth-estimation-app-gpu:latest \
+    depth-estimation-app:gpu \
     bash
 
 echo "Done."
