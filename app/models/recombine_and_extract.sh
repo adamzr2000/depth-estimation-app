@@ -1,21 +1,21 @@
 #!/bin/bash
 
-ARCHIVE="monocular_deployed.tar.gz"
-CHUNK_PREFIX="monocular_split_"
 PYTHON_SCRIPT="download_keras_model.py"
 
-# Recombine split parts
-echo "[*] Recombining split files into $ARCHIVE..."
-cat ${CHUNK_PREFIX}* > "$ARCHIVE"
+for FOLDER in monocular_deployed monocular_deployed_gpu; do
+  ARCHIVE="${FOLDER}.tar.gz"
+  CHUNK_PREFIX="${FOLDER}_split_"
 
-# Extract the archive
-echo "[*] Extracting $ARCHIVE..."
-tar -xzvf "$ARCHIVE"
+  echo "[*] Recombining split files for $FOLDER into $ARCHIVE..."
+  cat ${CHUNK_PREFIX}* > "$ARCHIVE"
 
-# Clean up split parts and tar.gz
-echo "[*] Cleaning up split parts and archive..."
-rm -f "$ARCHIVE"
-rm -f ${CHUNK_PREFIX}*
+  echo "[*] Extracting $ARCHIVE..."
+  tar -xzvf "$ARCHIVE"
+
+  echo "[*] Cleaning up split parts and archive for $FOLDER..."
+  rm -f "$ARCHIVE"
+  rm -f ${CHUNK_PREFIX}*
+done
 
 # Ensure huggingface_hub is installed
 echo "[*] Checking Python dependencies..."

@@ -1,11 +1,23 @@
 #!/bin/bash
+#!/bin/bash
+
+# Default command to run inside the container
+default_cmd="python3 test_keras_tf_version.py"
+
+# If the user passed arguments, use those as the full command; otherwise use the default
+if [ "$#" -gt 0 ]; then
+  cmd="$*"
+else
+  cmd="$default_cmd"
+fi
+
 docker run \
     -it \
     --rm \
     --name depth-estimation-app \
     --hostname depth-estimation-app \
     -v "$(pwd)"/app:/app \
-    -e LD_LIBRARY_PATH=/app/monocular_deployed:$LD_LIBRARY_PATH \
+    -e LD_LIBRARY_PATH=/app/models/monocular_deployed_gpu:$LD_LIBRARY_PATH \
     -e OMP_NUM_THREADS=16 \
     -e DNNL_NUM_THREADS=16 \
     -e KMP_AFFINITY="granularity=fine,compact,1,0" \
@@ -15,6 +27,6 @@ docker run \
     --group-add video \
     --gpus all \
     depth-estimation-app:gpu \
-    bash
+    bash -c "cd /app && $cmd"
 
 echo "Done."

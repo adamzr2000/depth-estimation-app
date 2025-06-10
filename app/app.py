@@ -23,9 +23,14 @@ parser.add_argument(
     "-t", "--test",
     action="store_true",
     help="Test mode: read looped video from 'videos/test-video.mp4' instead of webcam.")
+parser.add_argument(
+    "--gpu",
+    action="store_true",
+    help="Use GPU-optimized SOL deployment (only valid with -m deploy)")
 args = parser.parse_args()
 mode = args.mode
 use_test = args.test
+use_gpu = args.gpu
 
 # -----------------------------------------------------------------------------
 # Suppress TensorFlow and Keras verbose logs
@@ -52,14 +57,37 @@ depth_logger.info(f"TensorFlow version: {tf.__version__}")
 gpu_support = tf.test.is_built_with_cuda()
 depth_logger.info(f"Built with GPU support: {'Yes' if gpu_support else 'No'}")
 
+
+if mode != "deploy" and use_gpu:
+    depth_logger.warning("Ignoring --gpu flag since mode is not 'deploy'.")
+
+
+# List physical GPUs detected by TensorFlow
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    print(f"GPUs Detected: {len(gpus)}")
+    for idx, gpu in enumerate(gpus):
+        print(f"  GPU {idx}: {gpu}")
+else:
+    print("No GPUs Detected")
+    # Print CPU details
+    cpu_devices = tf.config.list_physical_devices('CPU')
+    print(f"CPUs Detected: {len(cpu_devices)}")
+    for idx, cpu in enumerate(cpu_devices):
+        print(f"  CPU {idx}: {cpu}")
+
 # -----------------------------------------------------------------------------
 # Load and initialize model based on mode
 # -----------------------------------------------------------------------------
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
 if mode == "deploy":
-    depth_logger.info("Initializing SOL-optimized model from local files...")
-    from models.monocular_deployed.sol_monocular_example import sol_monocular
-    deploy_path = os.path.join(MODEL_DIR, 'monocular_deployed')
+    deploy_folder = "monocular_deployed_gpu" if use_gpu else "monocular_deployed"
+    depth_logger.info(f"Initializing SOL-optimized model from: {deploy_folder}")
+    if use_gpu:
+        from models.monocular_deployed_gpu.sol_monocular_example import sol_monocular
+    else:
+        from models.monocular_deployed.sol_monocular_example import sol_monocular
+    deploy_path = os.path.join(MODEL_DIR, deploy_folder)
     mod = sol_monocular(deploy_path)
     mod.init()
     vdims = np.ndarray((1,), dtype=np.int64)

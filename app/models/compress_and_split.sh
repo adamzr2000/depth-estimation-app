@@ -1,21 +1,20 @@
 #!/bin/bash
 
-FOLDER="monocular_deployed"
-ARCHIVE="monocular_deployed.tar.gz"
-CHUNK_PREFIX="monocular_split_"
 CHUNK_SIZE="50M"  # Adjust as needed
 
-# Compress folder
-echo "[*] Compressing $FOLDER..."
-tar -czvf "$ARCHIVE" "$FOLDER"
+for FOLDER in monocular_deployed monocular_deployed_gpu; do
+  ARCHIVE="${FOLDER}.tar.gz"
+  CHUNK_PREFIX="${FOLDER}_split_"
 
-# Split into parts
-echo "[*] Splitting into chunks of $CHUNK_SIZE..."
-split -b "$CHUNK_SIZE" "$ARCHIVE" "$CHUNK_PREFIX"
+  echo "[*] Compressing $FOLDER..."
+  tar -czvf "$ARCHIVE" "$FOLDER"
 
-# Delete original archive
-echo "[*] Deleting original archive: $ARCHIVE"
-rm "$ARCHIVE"
+  echo "[*] Splitting $ARCHIVE into chunks of $CHUNK_SIZE..."
+  split -b "$CHUNK_SIZE" "$ARCHIVE" "$CHUNK_PREFIX"
 
-echo "[✓] Done. Use 'cat ${CHUNK_PREFIX}* > $ARCHIVE' to recombine and extract."
+  echo "[*] Deleting original archive: $ARCHIVE"
+  rm "$ARCHIVE"
+
+  echo "[✓] Done with $FOLDER. Use 'cat ${CHUNK_PREFIX}* > $ARCHIVE' to recombine and extract."
+done
 

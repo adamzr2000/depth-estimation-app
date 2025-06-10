@@ -1,21 +1,30 @@
 import os
-import cv2
+from time import time
+import argparse
 import numpy as np
+import cv2
 import tensorflow as tf
 import keras
-from time import time
 
-import argparse
 argParser = argparse.ArgumentParser()
 argParser.add_argument("-m", "--mode", choices=["default", "local", "sol", "deploy"], default="default")
+argParser.add_argument(
+    "--gpu",
+    action="store_true",
+    help="Use GPU-optimized SOL deployment (only valid with -m deploy)")
+
 args = argParser.parse_args()
 
 use_local = args.mode == "local"
 use_sol = args.mode == "sol"
 use_deploy = args.mode == "deploy"
+use_deploy_gpu = args.gpu
 
 if use_sol:
     import sol
+
+if not use_deploy and use_deploy_gpu:
+    print("Ignoring --gpu flag since mode is not 'deploy'.")
 
 # Suppress TensorFlow logs
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -33,14 +42,29 @@ print(f"Keras version: {keras.__version__}")
 print(f"TensorFlow version: {tf.__version__}")
 print(f"Built with GPU support: {'Yes' if tf.test.is_built_with_cuda() else 'No'}")
 
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    print("GPUs detected:")
+    for gpu in gpus:
+        print("  ", gpu)
+else:
+    print("No GPU detected.")
+
+
 # Load pretrained depth model
 print("Loading pretrained model...")
 if use_sol or use_local:
     with tf.device('/cpu:0'):
         model = tf.keras.models.load_model("monocular")
 elif use_deploy:
-    from models.monocular_deployed.sol_monocular_example import sol_monocular
-    mod = sol_monocular("models/monocular_deployed")
+    deploy_folder = "monocular_deployed_gpu" if use_deploy_gpu else "monocular_deployed"
+    print(f"Initializing SOL-optimized model from: {deploy_folder}")
+    if use_deploy_gpu:
+        from models.monocular_deployed_gpu.sol_monocular_example import sol_monocular
+    else:
+        from models.monocular_deployed.sol_monocular_example import sol_monocular
+    deploy_path = os.path.join("models", deploy_folder)
+    mod = sol_monocular(deploy_path)
     mod.init()
     vdims = np.ndarray((1), dtype=np.int64)
 else:
