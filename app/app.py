@@ -7,7 +7,6 @@ import tensorflow as tf
 import keras
 import logging
 import argparse
-import shutil
 
 # -----------------------------------------------------------------------------
 # Argument parsing: choose execution mode and test flag
@@ -18,7 +17,7 @@ parser.add_argument(
     "-m", "--mode",
     choices=["default", "deploy"],
     default="default",
-    help="Mode: 'default' uses HuggingFace/Keras; 'deploy' uses sol_monocular deployment.")
+    help="Mode: 'default' uses HuggingFace/Keras; 'deploy' uses SOL deployment.")
 parser.add_argument(
     "-t", "--test",
     action="store_true",
@@ -33,10 +32,9 @@ use_test = args.test
 use_gpu = args.gpu
 
 # -----------------------------------------------------------------------------
-# Suppress TensorFlow and Keras verbose logs
+# Suppress verbose logs
 # -----------------------------------------------------------------------------
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-os.environ['KERAS_BACKEND'] = 'tensorflow'
 
 # -----------------------------------------------------------------------------
 # Logging configuration
@@ -49,47 +47,49 @@ depth_logger.info(f"Selected mode: {mode}")
 depth_logger.info(f"Test mode: {'enabled' if use_test else 'disabled'}")
 
 # -----------------------------------------------------------------------------
-# Log framework versions & hardware
+# Log framework versions
 # -----------------------------------------------------------------------------
 depth_logger.info(f"Keras version: {keras.__version__}")
 depth_logger.info(f"TensorFlow version: {tf.__version__}")
 
-gpu_support = tf.test.is_built_with_cuda()
-depth_logger.info(f"Built with GPU support: {'Yes' if gpu_support else 'No'}")
-
-
-if mode != "deploy" and use_gpu:
+# -----------------------------------------------------------------------------
+# If in deploy mode, prevent TF from grabbing GPUs
+# -----------------------------------------------------------------------------
+if mode == "deploy":
+    try:
+        tf.config.set_visible_devices([], 'GPU')
+        depth_logger.info("Hid TensorFlow GPUs in deploy mode to avoid context conflicts.")
+    except Exception as e:
+        depth_logger.warning(f"Could not hide GPUs: {e}")
+elif use_gpu:
     depth_logger.warning("Ignoring --gpu flag since mode is not 'deploy'.")
 
-
-# List physical GPUs detected by TensorFlow
+# -----------------------------------------------------------------------------
+# Device summary
+# -----------------------------------------------------------------------------
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
-    print(f"GPUs Detected: {len(gpus)}")
+    depth_logger.info(f"GPUs Detected: {len(gpus)}")
     for idx, gpu in enumerate(gpus):
-        print(f"  GPU {idx}: {gpu}")
+        depth_logger.info(f"  GPU {idx}: {gpu}")
 else:
-    print("No GPUs Detected")
-    # Print CPU details
-    cpu_devices = tf.config.list_physical_devices('CPU')
-    print(f"CPUs Detected: {len(cpu_devices)}")
-    for idx, cpu in enumerate(cpu_devices):
-        print(f"  CPU {idx}: {cpu}")
+    depth_logger.info("No GPUs Detected (TensorFlow)")
 
 # -----------------------------------------------------------------------------
-# Load and initialize model based on mode
+# Load model skeleton; SOL init deferred into worker thread
 # -----------------------------------------------------------------------------
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
 if mode == "deploy":
     deploy_folder = "monocular_deployed_gpu" if use_gpu else "monocular_deployed"
-    depth_logger.info(f"Initializing SOL-optimized model from: {deploy_folder}")
+    depth_logger.info(f"Using SOL-optimized model from: {deploy_folder}")
+    # import SOL binding
     if use_gpu:
         from models.monocular_deployed_gpu.sol_monocular_example import sol_monocular
     else:
         from models.monocular_deployed.sol_monocular_example import sol_monocular
     deploy_path = os.path.join(MODEL_DIR, deploy_folder)
+    # prepare but do not init
     mod = sol_monocular(deploy_path)
-    mod.init()
     vdims = np.ndarray((1,), dtype=np.int64)
 
     class DeployedModel:
@@ -104,8 +104,8 @@ if mode == "deploy":
             self.mod.run()
             return out
 
-    model = DeployedModel(mod, vdims)
-    depth_logger.info("Deployed model initialized successfully!")
+    model = None
+    initialized = False
 else:
     depth_logger.info("Loading local Keras model...")
     keras_path = os.path.join(MODEL_DIR, 'monocular_keras')
@@ -113,7 +113,7 @@ else:
     depth_logger.info("Keras model loaded from %s", keras_path)
 
 # -----------------------------------------------------------------------------
-# Video capture setup: webcam or test video
+# Video capture setup
 # -----------------------------------------------------------------------------
 source = 0
 if use_test:
@@ -127,15 +127,12 @@ if not cap.isOpened():
     exit(1)
 
 # -----------------------------------------------------------------------------
-# Flask application setup
+# Flask setup
 # -----------------------------------------------------------------------------
 app = Flask(__name__)
-
-# Input dimensions for preprocessing
 WIDTH, HEIGHT = 512, 512
 
-# Metrics for inference performance
-depth_logger.info("Starting video stream")
+# Metrics
 frame_count = 0
 total_inference_time = 0.0
 inference_count = 0
@@ -144,7 +141,7 @@ last_fps = 0.0
 last_avg_latency = 0.0
 
 # -----------------------------------------------------------------------------
-# Frame preprocessing helper
+# Frame preprocessing
 # -----------------------------------------------------------------------------
 def preprocess_frame(frame):
     resized = cv2.resize(frame, (WIDTH, HEIGHT))
@@ -152,7 +149,7 @@ def preprocess_frame(frame):
     return np.expand_dims(normalized, axis=0)
 
 # -----------------------------------------------------------------------------
-# Generator: raw video frames
+# Generators
 # -----------------------------------------------------------------------------
 def generate_original_frames():
     while True:
@@ -167,11 +164,22 @@ def generate_original_frames():
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
 
-# -----------------------------------------------------------------------------
-# Generator: depth‐estimated video frames
-# -----------------------------------------------------------------------------
+
 def generate_depth_frames():
-    global frame_count, total_inference_time, inference_count, last_latency, last_fps, last_avg_latency
+    global model, initialized, frame_count, total_inference_time, inference_count
+    global last_latency, last_fps, last_avg_latency
+
+    # Initialize SOL model in this thread if needed
+    if mode == "deploy" and not initialized:
+        try:
+            mod.init()
+            model = DeployedModel(mod, vdims)
+            initialized = True
+            depth_logger.info("SOL model initialized in worker thread.")
+        except Exception as e:
+            depth_logger.error(f"Error initializing SOL model: {e}")
+            raise
+
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -188,12 +196,9 @@ def generate_depth_frames():
         frame_count += 1
         total_inference_time += latency
         inference_count += 1
-        avg_latency = total_inference_time / inference_count
-        fps = 1.0 / latency if latency > 0 else float('inf')
-        # update globals for metrics endpoint
         last_latency = latency
-        last_fps = fps
-        last_avg_latency = avg_latency
+        last_fps = 1.0 / latency if latency > 0 else float('inf')
+        last_avg_latency = total_inference_time / inference_count
 
         mn, mx = float(depth_map.min()), float(depth_map.max())
         norm = (depth_map - mn) / (mx - mn + 1e-8)
@@ -216,7 +221,7 @@ def metrics():
     )
 
 # -----------------------------------------------------------------------------
-# Flask routes: index & video feeds
+# Flask routes
 # -----------------------------------------------------------------------------
 @app.route('/')
 def index():

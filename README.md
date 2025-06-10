@@ -43,6 +43,10 @@ Supports either live webcam or looped test-video playback, with two inference mo
   ./run_example_gpu.sh python3 app.py -m deploy --test --gpu
   ```
 
+![gpu-error](./utils/gpu-error.png)
+
+
+### Error in app_old.py
 ```
 desire6g@xtreme:~/adam/depth-estimation-app$ ./run_example_gpu.sh python3 app.py -m deploy --test --gpu
 

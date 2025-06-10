@@ -1,18 +1,24 @@
-#!/usr/bin/env python3
+from flask import Flask, render_template, Response, jsonify
 import os
-import argparse
+import cv2
+import numpy as np
+import time
+import tensorflow as tf
+import keras
 import logging
+import argparse
+import shutil
 
 # -----------------------------------------------------------------------------
-# Argument parsing
+# Argument parsing: choose execution mode and test flag
 # -----------------------------------------------------------------------------
 parser = argparse.ArgumentParser(
-    description="Run depth estimation in default (Keras) or deploy (SOL) modes, with optional test video and GPU-offload.")
+    description="Run depth estimation in default (Keras), deploy, or test video mode.")
 parser.add_argument(
     "-m", "--mode",
     choices=["default", "deploy"],
     default="default",
-    help="Mode: 'default' uses HuggingFace/Keras; 'deploy' uses SOL deployment.")
+    help="Mode: 'default' uses HuggingFace/Keras; 'deploy' uses sol_monocular deployment.")
 parser.add_argument(
     "-t", "--test",
     action="store_true",
@@ -27,34 +33,53 @@ use_test = args.test
 use_gpu = args.gpu
 
 # -----------------------------------------------------------------------------
-# Logging configuration
-# -----------------------------------------------------------------------------
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-depth_logger = logging.getLogger("depth_estimation")
-
-# -----------------------------------------------------------------------------
-# Warn invalid flag usage
-# -----------------------------------------------------------------------------
-if mode != "deploy" and use_gpu:
-    depth_logger.warning("Ignoring --gpu flag since mode is not 'deploy'.")
-
-# -----------------------------------------------------------------------------
-# Suppress TensorFlow logs and Keras backend default
+# Suppress TensorFlow and Keras verbose logs
 # -----------------------------------------------------------------------------
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['KERAS_BACKEND'] = 'tensorflow'
 
 # -----------------------------------------------------------------------------
-# Hide GPUs from TensorFlow when using SOL GPU
+# Logging configuration
 # -----------------------------------------------------------------------------
-if mode == "deploy" and use_gpu:
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
-    depth_logger.info("Hid GPUs from TensorFlow; SOL will initialize CUDA context")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+depth_logger = logging.getLogger("depth_estimation")
+werkzeug_logger = logging.getLogger("werkzeug")
+werkzeug_logger.setLevel(logging.ERROR)
+depth_logger.info(f"Selected mode: {mode}")
+depth_logger.info(f"Test mode: {'enabled' if use_test else 'disabled'}")
 
 # -----------------------------------------------------------------------------
-# Initialize SOL-based model if deploying
+# Log framework versions & hardware
 # -----------------------------------------------------------------------------
-import numpy as np
+depth_logger.info(f"Keras version: {keras.__version__}")
+depth_logger.info(f"TensorFlow version: {tf.__version__}")
+
+gpu_support = tf.test.is_built_with_cuda()
+depth_logger.info(f"Built with GPU support: {'Yes' if gpu_support else 'No'}")
+
+
+if mode != "deploy" and use_gpu:
+    depth_logger.warning("Ignoring --gpu flag since mode is not 'deploy'.")
+
+
+# List physical GPUs detected by TensorFlow
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    print(f"GPUs Detected: {len(gpus)}")
+    for idx, gpu in enumerate(gpus):
+        print(f"  GPU {idx}: {gpu}")
+else:
+    print("No GPUs Detected")
+    # Print CPU details
+    cpu_devices = tf.config.list_physical_devices('CPU')
+    print(f"CPUs Detected: {len(cpu_devices)}")
+    for idx, cpu in enumerate(cpu_devices):
+        print(f"  CPU {idx}: {cpu}")
+
+# -----------------------------------------------------------------------------
+# Load and initialize model based on mode
+# -----------------------------------------------------------------------------
+MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
 if mode == "deploy":
     deploy_folder = "monocular_deployed_gpu" if use_gpu else "monocular_deployed"
     depth_logger.info(f"Initializing SOL-optimized model from: {deploy_folder}")
@@ -62,45 +87,30 @@ if mode == "deploy":
         from models.monocular_deployed_gpu.sol_monocular_example import sol_monocular
     else:
         from models.monocular_deployed.sol_monocular_example import sol_monocular
-
-    MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
     deploy_path = os.path.join(MODEL_DIR, deploy_folder)
-    sol_mod = sol_monocular(deploy_path)
-    sol_mod.init()
+    mod = sol_monocular(deploy_path)
+    mod.init()
     vdims = np.ndarray((1,), dtype=np.int64)
 
     class DeployedModel:
-        def __init__(self, sol_lib, vdims):
-            self.sol = sol_lib
+        def __init__(self, mod, vdims):
+            self.mod = mod
             self.vdims = vdims
 
         def predict(self, input_tensor):
-            # re-open and re-init to ensure valid CUDA context per call
-            self.sol.open()
-            self.sol.init()
             out = np.zeros((1, 256, 256, 1), dtype=np.float32)
-            return self.sol.run(input_tensor, out, self.vdims)
+            args = [input_tensor, out, self.vdims]
+            self.mod.set_IO(args)
+            self.mod.run()
+            return out
 
-    model = DeployedModel(sol_mod, vdims)
-    depth_logger.info("SOL-deployed model initialized successfully!")("SOL-deployed model initialized successfully!")
+    model = DeployedModel(mod, vdims)
+    depth_logger.info("Deployed model initialized successfully!")
 else:
-    # -------------------------------------------------------------------------
-    # Load Keras model for default mode
-    # -------------------------------------------------------------------------
-    import tensorflow as tf
-    import keras
-    depth_logger.info(f"Keras version: {keras.__version__}")
-    depth_logger.info(f"TensorFlow version: {tf.__version__}")
-    keras_path = os.path.join(os.path.dirname(__file__), 'models', 'monocular_keras')
+    depth_logger.info("Loading local Keras model...")
+    keras_path = os.path.join(MODEL_DIR, 'monocular_keras')
     model = tf.keras.models.load_model(keras_path)
-    depth_logger.info(f"Keras model loaded from {keras_path}")
-
-
-# Heavy imports for video and web
-# -----------------------------------------------------------------------------
-import cv2
-import time
-from flask import Flask, render_template, Response, jsonify
+    depth_logger.info("Keras model loaded from %s", keras_path)
 
 # -----------------------------------------------------------------------------
 # Video capture setup: webcam or test video
