@@ -119,14 +119,11 @@ def generate_depth_frames(input_dir=INPUT_DIR, width=WIDTH, height=HEIGHT):
                 # model.predict(input_tensor)
                 model = sol.optimize(model, [input_tensor], vdims=[False])
             if use_deploy:
+                mod.set_IO(input_tensor)
+                mod.optimize(2)
                 class model:
                     def predict(input):
-                        out__0 = np.zeros((1, 256, 256, 1, ), dtype=np.float32)
-                        dp_args = [input, out__0, vdims]
-                        #mod.set_IO(dp_args)
-                        #mod.run()
-                        mod.predict(dp_args)
-                        return out__0
+                        return mod(input)
         
         print("Before:", time()-t_before)
         t_model = time()
