@@ -12,7 +12,7 @@ import argparse
 # Argument parsing: choose execution mode and test flag
 # -----------------------------------------------------------------------------
 parser = argparse.ArgumentParser(
-    description="Run depth estimation in default (Keras), sol-optimize, deploy, or test video mode.")
+    description="Run depth estimation in default (Keras), deploy, or test video mode.")
 parser.add_argument(
     "-m", "--mode",
     choices=["default", "deploy"],
@@ -76,11 +76,9 @@ else:
     depth_logger.info("No GPUs Detected (TensorFlow)")
 
 # -----------------------------------------------------------------------------
-# Load model skeleton; SOL init/deploy deferred into worker thread
+# Load model skeleton; SOL init deferred into worker thread
 # -----------------------------------------------------------------------------
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
-initialized = False
-
 if mode == "deploy":
     deploy_folder = "monocular_deployed_gpu" if use_gpu else "monocular_deployed"
     depth_logger.info(f"Using SOL-optimized model from: {deploy_folder}")
@@ -90,10 +88,25 @@ if mode == "deploy":
     else:
         from models.monocular_deployed.sol_monocular_example import sol_monocular
     deploy_path = os.path.join(MODEL_DIR, deploy_folder)
+    # prepare but do not init
     mod = sol_monocular(deploy_path)
     vdims = np.ndarray((1,), dtype=np.int64)
-    model = None
 
+    class DeployedModel:
+        def __init__(self, mod, vdims):
+            self.mod = mod
+            self.vdims = vdims
+
+        def predict(self, input_tensor):
+            out = np.zeros((1, 256, 256, 1), dtype=np.float32)
+            args = [input_tensor, out, self.vdims]
+            #self.mod.set_IO(args)
+            #self.mod.run()
+            self.mod.predict(args)
+            return out
+
+    model = None
+    initialized = False
 else:
     depth_logger.info("Loading local Keras model...")
     keras_path = os.path.join(MODEL_DIR, 'monocular_keras')
@@ -120,9 +133,13 @@ if not cap.isOpened():
 app = Flask(__name__)
 WIDTH, HEIGHT = 512, 512
 
-# Metrics counters
-frame_count = total_inference_time = inference_count = 0
-last_latency = last_fps = last_avg_latency = 0.0
+# Metrics
+frame_count = 0
+total_inference_time = 0.0
+inference_count = 0
+last_latency = 0.0
+last_fps = 0.0
+last_avg_latency = 0.0
 
 # -----------------------------------------------------------------------------
 # Frame preprocessing
@@ -153,13 +170,17 @@ def generate_depth_frames():
     global model, initialized, frame_count, total_inference_time, inference_count
     global last_latency, last_fps, last_avg_latency
 
-    # Initialize SOL deployment if needed
+    # Initialize SOL model in this thread if needed
     if mode == "deploy" and not initialized:
-        mod.init()
-        initialized = True
-        depth_logger.info("SOL deployment initialized in worker thread.")
+        try:
+            mod.init()
+            model = DeployedModel(mod, vdims)
+            initialized = True
+            depth_logger.info("SOL model initialized in worker thread.")
+        except Exception as e:
+            depth_logger.error(f"Error initializing SOL model: {e}")
+            raise
 
-    once = False
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -170,24 +191,9 @@ def generate_depth_frames():
                 continue
 
         inp = preprocess_frame(frame)
-
-        # Deploy optimization on first frame
-        if mode == "deploy" and not once:
-            depth_logger.info("Setting I/O and optimizing deploy module...")
-            mod.set_IO(inp)
-            mod.optimize(2)
-            # wrap mod into predict API
-            class ModelWrapper:
-                
-                def predict(x):
-                    return mod(x)
-            model = ModelWrapper
-            once = True
-
         start = time.time()
         depth_map = model.predict(inp)[0, :, :, 0]
         latency = time.time() - start
-
         frame_count += 1
         total_inference_time += latency
         inference_count += 1
