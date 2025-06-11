@@ -36,7 +36,7 @@ use_gpu = args.gpu
 # Suppress TensorFlow and Keras verbose logs
 # -----------------------------------------------------------------------------
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-os.environ['KERAS_BACKEND'] = 'tensorflow'
+#os.environ['KERAS_BACKEND'] = 'tensorflow'
 
 # -----------------------------------------------------------------------------
 # Logging configuration

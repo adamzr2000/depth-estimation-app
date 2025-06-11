@@ -123,8 +123,9 @@ def generate_depth_frames(input_dir=INPUT_DIR, width=WIDTH, height=HEIGHT):
                     def predict(input):
                         out__0 = np.zeros((1, 256, 256, 1, ), dtype=np.float32)
                         dp_args = [input, out__0, vdims]
-                        mod.set_IO(dp_args)
-                        mod.run()
+                        #mod.set_IO(dp_args)
+                        #mod.run()
+                        mod.predict(dp_args)
                         return out__0
         
         print("Before:", time()-t_before)

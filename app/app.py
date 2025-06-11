@@ -100,8 +100,9 @@ if mode == "deploy":
         def predict(self, input_tensor):
             out = np.zeros((1, 256, 256, 1), dtype=np.float32)
             args = [input_tensor, out, self.vdims]
-            self.mod.set_IO(args)
-            self.mod.run()
+            #self.mod.set_IO(args)
+            #self.mod.run()
+            self.mod.predict(args)
             return out
 
     model = None
