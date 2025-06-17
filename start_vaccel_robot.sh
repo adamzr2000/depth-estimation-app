@@ -30,7 +30,7 @@ docker run --rm -d \
   -e VACCEL_LOG_LEVEL=1 \
   -e VACCEL_PLUGINS=libvaccel-rpc.so \
   -e VACCEL_RPC_ADDRESS="$RPC_ADDRESS" \
-  harbor.nbfc.io/nubificus/vaccel-monocular-cpu:x86_64
+  harbor.nbfc.io/nubificus/vaccel-monocular-cpu:x86_64 \
   tail -f /dev/null
 
 if docker ps | grep -q cpu-vaccel; then
