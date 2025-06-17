@@ -97,7 +97,7 @@ if mode == "deploy":
     deploy_path = os.path.join("models", *deploy_folder)
 
     if use_deploy_vaccel:
-        if use_deploy_gpu:
+        if use_gpu:
             from models.monocular_deployed_vaccel.sol_monocular_vaccel import sol_monocular_gpu as sol_monocular
         else:
             from models.monocular_deployed_vaccel.sol_monocular_vaccel import sol_monocular
