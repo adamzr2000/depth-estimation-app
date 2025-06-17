@@ -33,7 +33,7 @@ docker run --rm -d \
   harbor.nbfc.io/nubificus/vaccel-monocular-cpu:x86_64 \
   tail -f /dev/null
 
-if docker ps | grep -q cpu-vaccel; then
+if docker ps | grep -q vaccel-robot; then
   echo "✅ CPU vAccel container is running."
 else
   echo "❌ Failed to start CPU vAccel container."
