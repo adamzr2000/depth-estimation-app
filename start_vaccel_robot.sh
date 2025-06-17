@@ -25,6 +25,8 @@ docker run --rm -d \
   --name vaccel-robot \
   -v "$(pwd)/app/app.py:/app/app.py" \
   -v "$(pwd)/app/app_test.py:/app/app_test.py" \
+  -p 5554:5554 \
+  --group-add video \
   -e VACCEL_EXEC_DLCLOSE_ENABLED=0 \
   -e VACCEL_EXEC_DLOPEN_MODE=lazy \
   -e VACCEL_LOG_LEVEL=1 \
