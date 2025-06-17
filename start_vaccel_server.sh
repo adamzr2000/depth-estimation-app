@@ -6,8 +6,7 @@ docker run --rm \
   -v "$(pwd)/app/app_test.py:/app/app_test.py" \
   --name cpu-vaccel \
   -p 8193:8192 \
-  -d harbor.nbfc.io/nubificus/vaccel-monocular-cpu:x86_64 \
-  tail -f /dev/null
+  -d harbor.nbfc.io/nubificus/vaccel-monocular:x86_64 
 
 if docker ps | grep -q cpu-vaccel; then
   echo "✅ CPU vAccel container is running."

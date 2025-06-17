@@ -195,10 +195,10 @@ def generate_depth_frames():
         # Deploy optimization on first frame
         if mode == "deploy" and not once:
             
-            #if not use_deploy_vaccel:
-            #depth_logger.info("Setting I/O and optimizing deploy module...")
-            #mod.set_IO(inp)
-            #mod.optimize(2)
+            if use_gpu:
+              depth_logger.info("Setting I/O and optimizing deploy module...")
+              mod.set_IO(inp)
+              mod.optimize(2)
             # wrap mod into predict API
             class ModelWrapper:
 
