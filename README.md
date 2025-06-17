@@ -9,38 +9,84 @@ Supports either live webcam or looped test-video playback, with two inference mo
 
 ## Setup
 
-1. Extract and assemble SOL-optimized model files and required native libraries:
+1. **Recombine and extract SOL-optimized models:**
 
    ```bash
-   cd app/models && ./recombine_and_extract.sh && cd ../..
+   cd app/models/monocular_deployed && ./recombine_and_extract.sh
    ```
-2. Build Docker image:
+
+2. **Download original Keras model:**
 
    ```bash
-   ./build.sh
+   python3 app/models/download_keras_model.py
    ```
 
-## Usage
+3. **Build the Docker image (CPU or GPU):**
 
-* **Default (Keras model)**
+   ```bash
+   ./build.sh        # CPU
+   ./build.sh --gpu  # GPU
+   ```
 
-  ```bash
-  ./run_example.sh python3 app.py -m default
-  ```
-* **Optimized (SOL-optimized model)**
+## Usage: Standalone Local Execution
 
-  ```bash
-  ./run_example.sh python3 app.py -m deploy
-  ```
-* **Test mode (looped video, no webcam)**
+* **Keras model (default):**
 
   ```bash
-  ./run_example.sh python3 app.py -m deploy --test
+  ./start_app_cpu.sh python3 app.py -m default
   ```
 
-* **Test mode (looped video, no webcam) with GPU**
+* **SOL-optimized model (CPU):**
+
   ```bash
-  ./run_example_gpu.sh python3 app.py -m deploy --test --gpu
+  ./start_app_cpu.sh python3 app.py -m deploy
+  ```
+
+* **Test mode (looped video, CPU):**
+
+  ```bash
+  ./start_app_cpu.sh python3 app.py -m deploy --test
+  ```
+
+* **Test mode with GPU:**
+
+  ```bash
+  ./start_app_gpu.sh python3 app.py -m deploy --test --gpu
+  ```
+
+---
+
+## Demo: Remote Execution with vAccel
+
+**On the GPU server:**
+
+```bash
+./start_vaccel_server.sh
+```
+
+This launches:
+
+* A GPU-enabled vAccel container on port `8192`
+* A CPU-only vAccel container on port `8193`
+
+**On the robot (client):**
+
+```bash
+./start_vaccel_robot.sh --rpc tcp://10.5.1.21:8192
+```
+
+Then, execute the app inside the container:
+
+* **Using GPU (remote):**
+
+  ```bash
+  docker exec -it vaccel-robot python3 app.py -m deploy --vaccel --gpu --test
+  ```
+
+* **Using CPU (remote):**
+
+  ```bash
+  docker exec -it vaccel-robot bash -c "export VACCEL_RPC_ADDRESS=tcp://10.5.1.21:8193 && python3 app.py -m deploy --vaccel --test"
   ```
 
 ## Web Interface

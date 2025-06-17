@@ -26,10 +26,16 @@ parser.add_argument(
     "--gpu",
     action="store_true",
     help="Use GPU-optimized SOL deployment (only valid with -m deploy)")
+parser.add_argument(
+    "--vaccel",
+    action="store_true",
+    help="Use vaccel SOL deployment (only valid with -m deploy)")
+
 args = parser.parse_args()
 mode = args.mode
 use_test = args.test
 use_gpu = args.gpu
+use_deploy_vaccel = args.vaccel
 
 # -----------------------------------------------------------------------------
 # Suppress verbose logs
@@ -78,25 +84,36 @@ else:
 # -----------------------------------------------------------------------------
 # Load model skeleton; SOL init/deploy deferred into worker thread
 # -----------------------------------------------------------------------------
-MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
 initialized = False
 
 if mode == "deploy":
-    deploy_folder = "monocular_deployed_gpu" if use_gpu else "monocular_deployed"
-    depth_logger.info(f"Using SOL-optimized model from: {deploy_folder}")
-    # import SOL binding
-    if use_gpu:
-        from models.monocular_deployed_gpu.sol_monocular_example import sol_monocular
+    if use_deploy_vaccel:
+        deploy_folder = ["monocular_deployed_vaccel"]
+    elif use_gpu:
+        deploy_folder = ["monocular_deployed", "lib_gpu"]
     else:
-        from models.monocular_deployed.sol_monocular_example import sol_monocular
-    deploy_path = os.path.join(MODEL_DIR, deploy_folder)
+        deploy_folder = ["monocular_deployed", "lib_cpu"]
+
+    deploy_path = os.path.join("models", *deploy_folder)
+
+    if use_deploy_vaccel:
+        if use_deploy_gpu:
+            from models.monocular_deployed_vaccel.sol_monocular_vaccel import sol_monocular_gpu as sol_monocular
+        else:
+            from models.monocular_deployed_vaccel.sol_monocular_vaccel import sol_monocular
+    elif use_gpu:
+        from models.monocular_deployed.lib_gpu.sol_monocular_example import sol_monocular
+    else:
+        from models.monocular_deployed.lib_cpu.sol_monocular_example import sol_monocular
+
+    depth_logger.info(f"Using SOL-optimized model from: {deploy_path}")
     mod = sol_monocular(deploy_path)
     vdims = np.ndarray((1,), dtype=np.int64)
     model = None
 
 else:
     depth_logger.info("Loading local Keras model...")
-    keras_path = os.path.join(MODEL_DIR, 'monocular_keras')
+    keras_path = os.path.join("models", "monocular_keras")
     model = tf.keras.models.load_model(keras_path)
     depth_logger.info("Keras model loaded from %s", keras_path)
 
@@ -177,9 +194,11 @@ def generate_depth_frames():
 
         # Deploy optimization on first frame
         if mode == "deploy" and not once:
-            depth_logger.info("Setting I/O and optimizing deploy module...")
-            mod.set_IO(inp)
-            mod.optimize(2)
+            
+            #if not use_deploy_vaccel:
+            #depth_logger.info("Setting I/O and optimizing deploy module...")
+            #mod.set_IO(inp)
+            #mod.optimize(2)
             # wrap mod into predict API
             class ModelWrapper:
 

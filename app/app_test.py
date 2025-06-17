@@ -12,6 +12,10 @@ argParser.add_argument(
     "--gpu",
     action="store_true",
     help="Use GPU-optimized SOL deployment (only valid with -m deploy)")
+argParser.add_argument(
+    "--vaccel",
+    action="store_true",
+    help="Use vaccel SOL deployment (only valid with -m deploy)")
 
 args = argParser.parse_args()
 
@@ -19,12 +23,16 @@ use_local = args.mode == "local"
 use_sol = args.mode == "sol"
 use_deploy = args.mode == "deploy"
 use_deploy_gpu = args.gpu
+use_deploy_vaccel = args.vaccel
 
 if use_sol:
     import sol
 
 if not use_deploy and use_deploy_gpu:
     print("Ignoring --gpu flag since mode is not 'deploy'.")
+
+if not use_deploy and use_deploy_vaccel:
+    print("Ignoring --vaccel flag since mode is not 'deploy'.")
 
 # Suppress TensorFlow logs
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -57,13 +65,26 @@ if use_sol or use_local:
     with tf.device('/cpu:0'):
         model = tf.keras.models.load_model("monocular")
 elif use_deploy:
-    deploy_folder = "monocular_deployed_gpu" if use_deploy_gpu else "monocular_deployed"
-    print(f"Initializing SOL-optimized model from: {deploy_folder}")
-    if use_deploy_gpu:
-        from models.monocular_deployed_gpu.sol_monocular_example import sol_monocular
+    if use_deploy_vaccel:
+        deploy_folder = ["monocular_deployed_vaccel"]
+    elif use_deploy_gpu:
+        deploy_folder = ["monocular_deployed", "lib_gpu"]
     else:
-        from models.monocular_deployed.sol_monocular_example import sol_monocular
-    deploy_path = os.path.join("models", deploy_folder)
+        deploy_folder = ["monocular_deployed", "lib_cpu"]
+
+    deploy_path = os.path.join("models", *deploy_folder)
+
+    print(f"Initializing SOL-optimized model from: {deploy_path}")
+    if use_deploy_vaccel:
+        if use_deploy_gpu:
+            from models.monocular_deployed_vaccel.sol_monocular_vaccel import sol_monocular_gpu as sol_monocular
+        else:
+            from models.monocular_deployed_vaccel.sol_monocular_vaccel import sol_monocular
+    elif use_deploy_gpu:
+        from models.monocular_deployed.lib_gpu.sol_monocular_example import sol_monocular
+    else:
+        from models.monocular_deployed.lib_cpu.sol_monocular_example import sol_monocular
+
     mod = sol_monocular(deploy_path)
     mod.init()
     vdims = np.ndarray((1), dtype=np.int64)
@@ -119,12 +140,12 @@ def generate_depth_frames(input_dir=INPUT_DIR, width=WIDTH, height=HEIGHT):
                 # model.predict(input_tensor)
                 model = sol.optimize(model, [input_tensor], vdims=[False])
             if use_deploy:
-                mod.set_IO(input_tensor)
-                mod.optimize(2)
+                #mod.set_IO(input_tensor)
+                #mod.optimize(2)
                 class model:
                     def predict(input):
                         return mod(input)
-        
+
         print("Before:", time()-t_before)
         t_model = time()
         depth_map = model.predict(input_tensor)[0, :, :, 0]
