@@ -7,6 +7,8 @@ import tensorflow as tf
 import keras
 import logging
 import argparse
+import threading
+import atexit
 
 # -----------------------------------------------------------------------------
 # Argument parsing
@@ -91,11 +93,31 @@ else:
     depth_logger.info(f"Keras model loaded from {keras_path}")
 
 # -----------------------------------------------------------------------------
+# Source setup
+# -----------------------------------------------------------------------------
+source = os.path.join(os.path.dirname(__file__), 'videos', 'test-video.mp4') if use_test else 0
+cap = None
+cap_lock = threading.Lock()
+
+if not use_test:
+    cap = cv2.VideoCapture(source)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FPS, 15)
+    if cap.get(cv2.CAP_PROP_FOURCC) != 0.0:
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+
+@atexit.register
+def release_camera():
+    if cap and cap.isOpened():
+        cap.release()
+        depth_logger.info("Released shared camera.")
+
+# -----------------------------------------------------------------------------
 # Flask setup
 # -----------------------------------------------------------------------------
 app = Flask(__name__)
 WIDTH, HEIGHT = 512, 512
-source = os.path.join(os.path.dirname(__file__), 'videos', 'test-video.mp4') if use_test else 0
 
 frame_count = total_inference_time = inference_count = 0
 last_latency = last_fps = last_avg_latency = 0.0
@@ -114,93 +136,94 @@ def preprocess_frame(frame):
 # Generators
 # -----------------------------------------------------------------------------
 def generate_original_frames():
-    cap = cv2.VideoCapture(source)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    cap.set(cv2.CAP_PROP_FPS, 15)
-    if cap.get(cv2.CAP_PROP_FOURCC) != 0.0:
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    frame_interval = 1 / fps if fps > 0 else 1 / 30.0
-
-    while True:
-        start_time = time.time()
-        ret, frame = cap.read()
-        if not ret:
-            if use_test:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    if use_test:
+        cap_local = cv2.VideoCapture(source)
+        cap_local.set(cv2.CAP_PROP_FPS, 15)
+        fps = cap_local.get(cv2.CAP_PROP_FPS)
+        frame_interval = 1 / fps if fps > 0 else 1 / 30.0
+        while True:
+            start_time = time.time()
+            ret, frame = cap_local.read()
+            if not ret:
+                cap_local.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 continue
-            else:
-                break
-
-        _, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
-
-        elapsed = time.time() - start_time
-        time.sleep(max(0, frame_interval - elapsed))
-
-    cap.release()
+            _, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
+            time.sleep(max(0, frame_interval - (time.time() - start_time)))
+    else:
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        frame_interval = 1 / fps if fps > 0 else 1 / 30.0
+        while True:
+            start_time = time.time()
+            with cap_lock:
+                ret, frame = cap.read()
+            if not ret:
+                time.sleep(0.01)
+                continue
+            _, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
+            time.sleep(max(0, frame_interval - (time.time() - start_time)))
 
 def generate_depth_frames():
-    cap = cv2.VideoCapture(source)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    cap.set(cv2.CAP_PROP_FPS, 15)
-    if cap.get(cv2.CAP_PROP_FOURCC) != 0.0:
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-
     global model, initialized, frame_count, total_inference_time, inference_count
     global last_latency, last_fps, last_avg_latency
+
+    if use_test:
+        cap_local = cv2.VideoCapture(source)
+        cap_local.set(cv2.CAP_PROP_FPS, 15)
+        while True:
+            ret, frame = cap_local.read()
+            if not ret:
+                cap_local.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                continue
+            yield from process_depth_frame(frame)
+    else:
+        while True:
+            with cap_lock:
+                ret, frame = cap.read()
+            if not ret:
+                time.sleep(0.01)
+                continue
+            yield from process_depth_frame(frame)
+
+def process_depth_frame(frame):
+    global model, initialized, frame_count, total_inference_time, inference_count
+    global last_latency, last_fps, last_avg_latency
+
+    inp = preprocess_frame(frame)
 
     if mode == "deploy" and not initialized:
         mod.init()
         initialized = True
-        depth_logger.info("SOL deployment initialized in worker thread.")
+        depth_logger.info("SOL deployment initialized.")
 
-    once = False
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            if use_test:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                continue
-            else:
-                break
+    if mode == "deploy" and isinstance(model, type(None)):
+        if use_gpu:
+            mod.set_IO(inp)
+            mod.optimize(2)
+        class ModelWrapper:
+            def predict(x):
+                return mod(x)
+        model = ModelWrapper
 
-        inp = preprocess_frame(frame)
+    start = time.time()
+    depth_map = model.predict(inp)[0, :, :, 0]
+    latency = time.time() - start
 
-        if mode == "deploy" and not once:
-            if use_gpu:
-                depth_logger.info("Setting I/O and optimizing deploy module...")
-                mod.set_IO(inp)
-                mod.optimize(2)
-            class ModelWrapper:
-                def predict(x):
-                    return mod(x)
-            model = ModelWrapper
-            once = True
+    frame_count += 1
+    total_inference_time += latency
+    inference_count += 1
+    last_latency = latency
+    last_fps = 1.0 / latency if latency > 0 else float('inf')
+    last_avg_latency = total_inference_time / inference_count
 
-        start = time.time()
-        depth_map = model.predict(inp)[0, :, :, 0]
-        latency = time.time() - start
+    mn, mx = float(depth_map.min()), float(depth_map.max())
+    norm = (depth_map - mn) / (mx - mn + 1e-8)
+    cmap = (norm * 255).astype(np.uint8)
+    depth_col = cv2.applyColorMap(cmap, cv2.COLORMAP_JET)
+    _, buf = cv2.imencode('.jpg', depth_col, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
 
-        frame_count += 1
-        total_inference_time += latency
-        inference_count += 1
-        last_latency = latency
-        last_fps = 1.0 / latency if latency > 0 else float('inf')
-        last_avg_latency = total_inference_time / inference_count
-
-        mn, mx = float(depth_map.min()), float(depth_map.max())
-        norm = (depth_map - mn) / (mx - mn + 1e-8)
-        cmap = (norm * 255).astype(np.uint8)
-        depth_col = cv2.applyColorMap(cmap, cv2.COLORMAP_JET)
-        _, buf = cv2.imencode('.jpg', depth_col, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-
-        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
-
-    cap.release()
+    yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
 
 # -----------------------------------------------------------------------------
 # Metrics endpoint
