@@ -27,6 +27,7 @@ docker run --rm -d \
   -v "$(pwd)/app/app_test.py:/app/app_test.py" \
   -v "$(pwd)/app/templates/index.html:/app/templates/index.html" \
   -p 5554:5554 \
+  --privileged \
   --group-add video \
   -e VACCEL_EXEC_DLCLOSE_ENABLED=0 \
   -e VACCEL_EXEC_DLOPEN_MODE=lazy \
