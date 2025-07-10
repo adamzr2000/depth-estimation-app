@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monocular Depth Estimation Viewer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f0f0;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+    }
+    .container {
+      width: 100%;
+      max-width: 800px;
+      padding: 20px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    h1 {
+      color: #333;
+      margin: 0;
+    }
+    .info {
+      font-size: 20px;
+      color: #131313;
+      margin: 10px 0;
+    }
+    .video-stream {
+      width: 100%;
+      max-width: 640px;
+      aspect-ratio: 4 / 3;
+      border: 3px solid #ccc;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+    .buttons {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .btn {
+      padding: 10px 20px;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background: #0056b3;
+    }
+    .chart-container {
+      width: 100%;
+      max-width: 640px;
+      aspect-ratio: 21 / 10;
+      position: relative;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      box-sizing: border-box;
+      padding: 10px;
+    }
+    .chart-container canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    .legend {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      color: #333;
+      z-index: 1;
+    }
+    .legend-box {
+      width: 14px;
+      height: 14px;
+      background: rgba(0, 123, 255, 0.8);
+      display: inline-block;
+      margin-right: 6px;
+      border-radius: 2px;
+    }
+    .stats {
+      position: absolute;
+      bottom: 10px;
+      right: 15px;
+      text-align: right;
+      font-size: 16px;
+      color: #333;
+      background: rgba(255, 255, 255, 0.7);
+      padding: 4px 6px;
+      border-radius: 3px;
+      white-space: nowrap;
+      z-index: 1;
+    }
+    .stats .line:not(:first-child) {
+      margin-left: 12px;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>Monocular Depth Estimation Viewer</h1>
+    <div class="buttons">
+      <button class="btn" onclick="switchStream('original')">Original Video</button>
+      <button class="btn" onclick="switchStream('depth')">Depth Estimation</button>
+    </div>
+    <img id="videoStream" src="/original_video_feed" class="video-stream" alt="Video Stream">
+    <div class="info">Model: <span id="modelName">-</span> | GPU Enabled: <span id="gpuFlag">-</span></div>
+
+    <div class="chart-container">
+      <div class="legend"><span class="legend-box"></span>FPS</div>
+      <canvas id="fpsChart"></canvas>
+      <div class="stats">
+        <span class="line">FPS: <span id="statFps">0</span></span>
+	<span class="line">Avg FPS: <span id="statAvgFps">0</span></span>
+        <span class="line">Latency: <span id="statLatency">0</span> ms</span>
+        <span class="line">Avg Latency: <span id="statAvg">0</span> ms</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function switchStream(type) {
+      document.getElementById('videoStream').src =
+        type === 'original' ? '/original_video_feed' : '/depth_video_feed';
+    }
+
+    function updateMetrics() {
+      fetch('/metrics')
+        .then(r => r.json())
+        .then(data => {
+          const timeLabel = new Date().toLocaleTimeString();
+          chart.data.labels.push(timeLabel);
+          chart.data.datasets[0].data.push(data.fps);
+          if (chart.data.labels.length > 30) { chart.data.labels.shift(); chart.data.datasets[0].data.shift(); }
+          chart.update();
+
+          document.getElementById('statFps').innerText = data.fps;
+          document.getElementById('statLatency').innerText = data.latency_ms;
+          document.getElementById('statAvg').innerText = data.avg_latency_ms;
+          document.getElementById('statAvgFps').innerText = data.avg_fps;
+          document.getElementById('modelName').innerText = data.model;
+          document.getElementById('gpuFlag').innerText = data.gpu_enabled;
+        })
+        .catch(console.error);
+    }
+
+    let chart;
+    window.addEventListener('load', () => {
+      const ctx = document.getElementById('fpsChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ data: [], borderColor: 'rgba(0, 123, 255, 1)', backgroundColor: 'rgba(0, 123, 255, 0.2)', fill: true, borderWidth: 3, pointRadius: 2 }] },
+        options: { animation: false, maintainAspectRatio: true, scales: { y: { beginAtZero: true, ticks: { font: { size: 14 } }, grid: { drawOnChartArea: true } }, x: { ticks: { display: false }, grid: { drawOnChartArea: true, drawTicks: false } } }, plugins: { legend: { display: false } } }
+      });
+
+      updateMetrics();
+      setInterval(updateMetrics, 2000);
+    });
+  </script>
+</body>
+</html>
+

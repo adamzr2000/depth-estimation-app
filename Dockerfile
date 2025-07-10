@@ -26,7 +26,7 @@ RUN pip3 install --no-cache-dir \
       tensorflow==2.15.0 \
       numpy \
       huggingface_hub \
-      flask 
+      flask
 
 # Create a working directory
 WORKDIR /app
